@@ -26,7 +26,7 @@ var (
 	version = "development"
 
 	// Set the flags here to be used later in the code.
-	flagProfile     = flag.String("aws-profile", "", "AWS Profile to use. Blank by defalt and ommited.")
+	flagProfile     = flag.String("aws-profile", "", "AWS Profile to use. Blank by default and omitted.")
 	flagRegion      = flag.String("region", "eu-west-1", "AWS region to use. eu-west-1 by default.")
 	flagSecretKey   = flag.String("secret", "", "The key to use when collecting the secret.")
 	flagUpperCase   = flag.Bool("upper-case", false, "Attempt to uppercase all the returned keys")
