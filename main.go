@@ -9,9 +9,11 @@ package main
 // to be used when the binary is actually doing its job.
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -20,14 +22,17 @@ import (
 
 var (
 	// set the version here
-	version = "0.0.1"
+	// The build version is expected to be set by the build script.
+	version = "development"
 
 	// Set the flags here to be used later in the code.
-	flagProfile   = flag.String("aws-profile", "", "AWS Profile to use. Blank by defalt and ommited.")
-	flagRegion    = flag.String("region", "eu-west-1", "AWS region to use. eu-west-1 by default.")
-	flagSecretKey = flag.String("secret", "", "The key to use when collecting the secret.")
-	flagHelp      = flag.Bool("h", false, "Help menu.")
-	flagVersion   = flag.Bool("v", false, "Shows the version.")
+	flagProfile     = flag.String("aws-profile", "", "AWS Profile to use. Blank by defalt and ommited.")
+	flagRegion      = flag.String("region", "eu-west-1", "AWS region to use. eu-west-1 by default.")
+	flagSecretKey   = flag.String("secret", "", "The key to use when collecting the secret.")
+	flagUpperCase   = flag.Bool("upper-case", false, "Attempt to uppercase all the returned keys")
+	flagPrependKeys = flag.String("prepend-with", "", "Prepend the returned keys with given string. Upper casing happens after this is applied.")
+	flagHelp        = flag.Bool("h", false, "Help menu.")
+	flagVersion     = flag.Bool("v", false, "Shows the version.")
 )
 
 func main() {
@@ -47,7 +52,7 @@ func main() {
 
 	// If there is no secret path we can no continue.
 	if *flagSecretKey == "" {
-		writeSTDERR("secret is not set. I can not continue like this. Exiting...")
+		writeSTDERR(fmt.Sprintln("secret is not set. I can not continue like this. Exiting..."))
 		os.Exit(1)
 	}
 
@@ -60,15 +65,24 @@ func main() {
 		os.Exit(1)
 	}
 	// Attempt to collect secret
-	output, err := collectSecret(sess, *flagSecretKey)
+	secretString, err := collectSecret(sess, *flagSecretKey)
 	if err != nil {
 		// This error is already pretty well formatted.
 		writeSTDERR(fmt.Sprintln(err))
 		os.Exit(1)
 	}
 
+	// PostProcessing
+	// Append prefix: Some people like to prepend the secrets keys with a tag to know which ones they collected. Like AWS_SM_<value>
+	// Other reasons might be to allow automatic collection from applications if they have the correct keys.
+	secretString, err = postProcess(secretString, *flagPrependKeys, *flagUpperCase)
+	if err != nil {
+		writeSTDERR(fmt.Sprintln(err))
+		os.Exit(1)
+	}
+
 	// print out the secrets
-	fmt.Println(output)
+	fmt.Println(secretString)
 }
 
 // awsOption will check to see if profile is set and optionally add it in if required.
@@ -111,4 +125,42 @@ func collectSecret(awsSession *session.Session, key string) (string, error) {
 	// The returned text from AWS Secret manager is already in JSON and a key value pair setup.
 	// This will work great with Launch.
 	return *result.SecretString, nil
+}
+
+func postProcess(input string, prepend string, upperCase bool) (string, error) {
+
+	// First we need to convert out input in to a map so we can edit it.
+	editMe := map[string]string{}
+	err := json.Unmarshal([]byte(input), &editMe)
+	if err != nil {
+		return "", fmt.Errorf("there was an error reading the collected secrets before editing. Error: %s", err)
+	}
+
+	// To append we need to actually create new keys with the appended string and then remove the old key
+	if prepend != "" {
+		newMap := map[string]string{}
+		for key, value := range editMe {
+			newMap[fmt.Sprintf("%s%s", prepend, key)] = value
+		}
+		editMe = newMap
+	}
+
+	// Now cycle through the map again and upper case everything if required.
+	// ToUpper returns s with all Unicode letters mapped to their upper case.
+	// https://golang.org/pkg/strings/#ToUpper
+	if upperCase {
+		newMap := map[string]string{}
+		for key, value := range editMe {
+			newMap[strings.ToUpper(key)] = value
+		}
+		editMe = newMap
+	}
+
+	// convert back to json string and return
+	output, err := json.Marshal(editMe)
+	if err != nil {
+		return "", fmt.Errorf("there was an error while converting the updated values back to JSON. Error: %s", err)
+	}
+
+	return string(output), err
 }
