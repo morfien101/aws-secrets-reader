@@ -1,3 +1,3 @@
-# New processor types supported
+# Support AWS config files.
 
-This release only changes the builds to add in `arm` and `arm64` processor types.
+This release will correctly support AWS roles if config files need to be loaded.

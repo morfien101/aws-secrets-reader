@@ -91,6 +91,8 @@ func awsOptions(region, profile string) session.Options {
 		Config: aws.Config{Region: aws.String(region)},
 	}
 	if profile != "" {
+		// We need to tell go to load the configuration files as users might be sourcing profiles from roles.
+		os.Setenv("AWS_SDK_LOAD_CONFIG", "true")
 		options.Profile = profile
 	}
 	return options
