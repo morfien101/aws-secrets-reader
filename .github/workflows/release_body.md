@@ -1,3 +1,3 @@
-# Support AWS config files.
+# Support ARM and AM64 ARCH
 
-This release will correctly support AWS roles if config files need to be loaded.
+Adding in ARM builds. This allows MAc Silicon and Gravitation from AWS.
