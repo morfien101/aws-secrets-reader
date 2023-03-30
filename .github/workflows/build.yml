@@ -32,12 +32,17 @@ jobs:
 
           # Run the build for each supported OS using x86_64.
           # Building for windows.
+          echo "Building for Windows on amd64..."
           GOOS=$os GOARCH=amd64 CGO_ENABLED=0 go build -a -ldflags="-X main.version=${{ steps.get_tag.outputs.SOURCE_TAG }}" -o ./artifacts/aws-secret-reader_$os.exe .
 
           # Make an ARM and ARM64 bin for linux and Mac.
           for os in "linux" "darwin"; do
             for arch in "amd64" "arm64" "arm"; do
               echo "Building for $os on $arch..."
+              if [ "$os" = "darwin" ] && [ "$arch" = "arm" ]; then
+                echo "Skipping $os on $arch..."
+                continue
+              fi
               GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build -a -ldflags="-X main.version=${{ steps.get_tag.outputs.SOURCE_TAG }}" -o ./artifacts/aws-secret-reader_${os}_${arch} .
             done
           done
