@@ -89,5 +89,5 @@ Currently there are the following formats available.
 This allows you to use the eval command to collect exports and bring them into your current shell.
 
 ```sh
-eval $(secrets-reader -aws-profile prod -region eu-west-1 -secret super-shhh-secret)
+eval $(secrets-reader -aws-profile prod -region eu-west-1 -secret super-shhh-secret -format shell_export)
 ```
