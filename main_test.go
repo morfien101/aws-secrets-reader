@@ -66,7 +66,7 @@ func TestJSONFormatting(t *testing.T) {
 	*flagPrependKeys = "gopher_"
 
 	outputMap, _ := postProcess(input, "gopher_", true)
-	outputString, err := format(outputMap, "toast")
+	outputString, err := format(outputMap, "json")
 
 	if err != nil {
 		t.Logf("postProcess failed. Error: %s", err)
