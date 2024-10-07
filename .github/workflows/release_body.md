@@ -1,3 +1,3 @@
-# Support ARM and AM64 ARCH
+# Support output formatting
 
-Adding in ARM builds. This allows Mac Silicon and Gravitation from AWS.
+This release supports formatting of the output.

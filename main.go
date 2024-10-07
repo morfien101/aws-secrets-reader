@@ -18,6 +18,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
+	"github.com/joho/godotenv"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -33,6 +35,7 @@ var (
 	flagPrependKeys = flag.String("prepend-with", "", "Prepend the returned keys with given string. Upper casing happens after this is applied.")
 	flagHelp        = flag.Bool("h", false, "Help menu.")
 	flagVersion     = flag.Bool("v", false, "Shows the version.")
+	flagFormat      = flag.String("format", "json", "The format to return the secrets in. Default is JSON. Supported values are: json, yaml, env and shell_export")
 )
 
 func main() {
@@ -65,7 +68,7 @@ func main() {
 		os.Exit(1)
 	}
 	// Attempt to collect secret
-	secretString, err := collectSecret(sess, *flagSecretKey)
+	rawSecret, err := collectSecret(sess, *flagSecretKey)
 	if err != nil {
 		// This error is already pretty well formatted.
 		writeSTDERR(fmt.Sprintln(err))
@@ -75,14 +78,19 @@ func main() {
 	// PostProcessing
 	// Append prefix: Some people like to prepend the secrets keys with a tag to know which ones they collected. Like AWS_SM_<value>
 	// Other reasons might be to allow automatic collection from applications if they have the correct keys.
-	secretString, err = postProcess(secretString, *flagPrependKeys, *flagUpperCase)
+	secretMap, err := postProcess(rawSecret, *flagPrependKeys, *flagUpperCase)
+	if err != nil {
+		writeSTDERR(fmt.Sprintln(err))
+		os.Exit(1)
+	}
+	formattedSecret, err := format(secretMap, *flagFormat)
 	if err != nil {
 		writeSTDERR(fmt.Sprintln(err))
 		os.Exit(1)
 	}
 
 	// print out the secrets
-	fmt.Println(secretString)
+	fmt.Println(formattedSecret)
 }
 
 // awsOption will check to see if profile is set and optionally add it in if required.
@@ -98,7 +106,7 @@ func awsOptions(region, profile string) session.Options {
 	return options
 }
 
-// awsSession just wraps the function used to create the session. This is mainly for furture work as AWS sometimes change this.
+// awsSession just wraps the function used to create the session. This is mainly for future work as AWS sometimes change this.
 func awsSession(options session.Options) (*session.Session, error) {
 	return session.NewSessionWithOptions(options)
 }
@@ -115,13 +123,12 @@ func collectSecret(awsSession *session.Session, key string) (string, error) {
 	svc := secretsmanager.New(awsSession)
 	input := &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(key),
-		//VersionStage: aws.String("AWSPREVIOUS"),
 	}
 
 	result, err := svc.GetSecretValue(input)
 	if err != nil {
 		// The errors from the AWS SDK are actually pretty useful. So we should make effort to use them.
-		return "", fmt.Errorf("error retriving the secret from %s. Error: %s", key, err.Error())
+		return "", fmt.Errorf("error retrieving the secret from %s. Error: %s", key, err.Error())
 	}
 
 	// The returned text from AWS Secret manager is already in JSON and a key value pair setup.
@@ -129,13 +136,13 @@ func collectSecret(awsSession *session.Session, key string) (string, error) {
 	return *result.SecretString, nil
 }
 
-func postProcess(input string, prepend string, upperCase bool) (string, error) {
+func postProcess(input string, prepend string, upperCase bool) (map[string]string, error) {
 
 	// First we need to convert out input in to a map so we can edit it.
 	editMe := map[string]string{}
 	err := json.Unmarshal([]byte(input), &editMe)
 	if err != nil {
-		return "", fmt.Errorf("there was an error reading the collected secrets before editing. Error: %s", err)
+		return map[string]string{}, fmt.Errorf("there was an error reading the collected secrets before editing. Error: %s", err)
 	}
 
 	// To append we need to actually create new keys with the appended string and then remove the old key
@@ -158,11 +165,52 @@ func postProcess(input string, prepend string, upperCase bool) (string, error) {
 		editMe = newMap
 	}
 
-	// convert back to json string and return
-	output, err := json.Marshal(editMe)
-	if err != nil {
-		return "", fmt.Errorf("there was an error while converting the updated values back to JSON. Error: %s", err)
-	}
+	return editMe, nil
+}
 
-	return string(output), err
+func format(output map[string]string, format string) (string, error) {
+	switch format {
+	case "json":
+		jsonOutput, err := json.Marshal(output)
+		if err != nil {
+			return "", fmt.Errorf("there was an error while converting the updated values back to JSON. Error: %s", err)
+		}
+		return string(jsonOutput), nil
+	case "yaml":
+		yamlOutput, err := yaml.Marshal(output)
+		if err != nil {
+			return "", fmt.Errorf("there was an error while converting the updated values back to YAML. Error: %s", err)
+		}
+		return string(yamlOutput), nil
+	case "env":
+		secrets := ""
+		for key, value := range output {
+			secrets += fmt.Sprintf("%s=%s\n", key, value)
+		}
+		data, err := godotenv.Unmarshal(secrets)
+		if err != nil {
+			return "", fmt.Errorf("there was an error while converting the updated values back to dotenv. Error: %s", err)
+		}
+		content, err := godotenv.Marshal(data)
+		if err != nil {
+			return "", fmt.Errorf("there was an error while converting the updated values back to dotenv. Error: %s", err)
+		}
+		return content, nil
+	case "shell_export":
+		secrets := ""
+		for key, value := range output {
+			secrets += fmt.Sprintf("%s=%s\n", key, value)
+		}
+		data, err := godotenv.Unmarshal(secrets)
+		if err != nil {
+			return "", fmt.Errorf("there was an error while converting the updated values back to dotenv. Error: %s", err)
+		}
+		exportedSecrets := ""
+		for key, value := range data {
+			exportedSecrets += fmt.Sprintf("export %s=%s\n", key, value)
+		}
+		return exportedSecrets, nil
+	default:
+		return "", fmt.Errorf("the format %s is not supported", format)
+	}
 }

@@ -74,3 +74,20 @@ You can use both the post processors currently available. Just remember that UPP
 # becomes
 {"POTATOES_BADGER":"mushroom"}
 ```
+
+## Formatting
+
+Secrets can be ingested in a number of ways. So it stands to reason that the secrets reader can output the secrets in a number of formats.
+Currently there are the following formats available.
+
+* json
+* yaml
+* env
+* shell_export
+
+`shell_export` is the only one that requires some explaining. Basically you get the same as env format but with export written out at the beginning of each line.
+This allows you to use the eval command to collect exports and bring them into your current shell.
+
+```sh
+eval $(secrets-reader -aws-profile prod -region eu-west-1 -secret super-shhh-secret)
+```
